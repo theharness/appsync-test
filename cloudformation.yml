@@ -1,0 +1,148 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  # Cognito
+  AppsyncTestUserPool:
+    Type: 'AWS::Cognito::UserPool'
+    Properties:
+      UserPoolName: appsync-test
+  AppsyncTestUserPoolClient:
+    Type: 'AWS::Cognito::UserPoolClient'
+    Properties:
+      ClientName: appsync-test
+      UserPoolId: !Ref AppsyncTestUserPool
+      GenerateSecret: false
+    DependsOn:
+      - AppsyncTestUserPool
+  AppsyncTestIdentityPool:
+    Type: 'AWS::Cognito::IdentityPool'
+    Properties:
+      IdentityPoolName: AppsyncTest
+      CognitoIdentityProviders:
+        - ClientId: !Ref AppsyncTestUserPoolClient
+          ProviderName: !GetAtt
+            - AppsyncTestUserPool
+            - ProviderName
+      AllowUnauthenticatedIdentities: true
+    DependsOn:
+      - AppsyncTestUserPoolClient
+  AppsyncTestUnauthenticatedRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action:
+              - 'sts:AssumeRoleWithWebIdentity'
+            Condition:
+              StringEquals:
+                'cognito-identity.amazonaws.com:aud': !Ref AppsyncTestIdentityPool
+              'ForAnyValue:StringLike':
+                'cognito-identity.amazonaws.com:amr': unauthenticated
+      Policies:
+        - PolicyName: appsync-test-unauthorized-policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'mobileanalytics:PutEvents'
+                  - 'cognito-sync:*'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - "appsync:GraphQL"
+                Resource:
+                  - "*"
+    DependsOn:
+      - AppsyncTestIdentityPool
+  AppsyncTestIdentityPoolRoleAttatchment:
+    Type: 'AWS::Cognito::IdentityPoolRoleAttachment'
+    Properties:
+      IdentityPoolId: !Ref AppsyncTestIdentityPool
+      Roles:
+        unauthenticated: !GetAtt
+          - AppsyncTestUnauthenticatedRole
+          - Arn
+    DependsOn:
+      - AppsyncTestIdentityPool
+
+  # Appsync
+  AppsyncTestApi:
+    Type: 'AWS::AppSync::GraphQLApi'
+    Properties:
+      Name: appsync-test-api
+      AuthenticationType: AWS_IAM
+  Schema:
+    Type: 'AWS::AppSync::GraphQLSchema'
+    DependsOn:
+      - AppsyncTestApi
+    Properties:
+      ApiId: !GetAtt
+        - AppsyncTestApi
+        - ApiId
+      Definition: |
+        schema {
+          query: Query
+          mutation: Mutation
+          subscription: Subscription
+        }
+
+        type Query {
+          testQuery(text: String!): TestReturn!
+        }
+
+        type Mutation {
+          createTestMutation(text: String!): TestReturn!
+        }
+
+        type Subscription {
+          onCreateTestMutation(text: String!): TestReturn
+            @aws_subscribe(mutations: ["createTestMutation"])
+        }
+
+        type TestReturn {
+          createdAt: String!
+          text: String!
+        }
+
+
+  CreateTestMutationDataSource:
+    Type: 'AWS::AppSync::DataSource'
+    Properties:
+      Type: 'NONE'
+      Name: 'create_test_mutation'
+      ApiId: !GetAtt
+        - AppsyncTestApi
+        - ApiId
+    DependsOn:
+      - Schema
+      - AppsyncTestApi
+  CreateTestMutationResolver:
+    Type: 'AWS::AppSync::Resolver'
+    DependsOn:
+      - Schema
+      - AppsyncTestApi
+    Properties:
+      TypeName: Mutation
+      DataSourceName: !GetAtt
+        - CreateTestMutationDataSource
+        - Name
+      ApiId: !GetAtt
+        - AppsyncTestApi
+        - ApiId
+      FieldName: createTestMutation
+      ResponseMappingTemplate: |
+        $util.toJson($ctx.result)
+      RequestMappingTemplate: |
+        {
+          "version": "2017-02-28",
+          "payload": {
+            "text": "${context.arguments.text}",
+            "createdAt": "$util.time.nowISO8601()"
+          }
+        }
+
+Parameters: {}
