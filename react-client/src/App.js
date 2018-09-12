@@ -7,15 +7,16 @@ import TestSub from './graphql/testSub';
 import TestMutation from './graphql/testMutation';
 
 const NUMBER_OF_SUBS  = 10;    // Number of subscriptions for the test
-const NEW_USER        = true; // Clear local storage on refresh
+const NEW_USER        = false; // Clear local storage on refresh
 const NUMBER_OF_TESTS = 1;    // Run multiple tests
-const DELAY_MS        = 2000; // How long to wait in between subs
+const DELAY_MS        = 1000; // How long to wait in between subs
 
 class App extends Component {
 
   constructor(props) {
     super(props);
     this.subscriptions = [];
+    this.subCounter = 0;
   }
 
   componentWillMount() {
@@ -47,8 +48,11 @@ class App extends Component {
   }
 
   testSubs = async () => {
-    for (let i = 0; i < NUMBER_OF_SUBS; i++)
-      await API.graphql(graphqlOperation(TestMutation, { text: `test-${i}` }));  
+    for (let i = 0; i < NUMBER_OF_SUBS; i++) {
+      await API.graphql(graphqlOperation(TestMutation, { text: `test-${i}` }));
+      
+      await this.sleep(DELAY_MS);
+    }
   }
 
   subscribe = async subscriptions => {
@@ -57,7 +61,11 @@ class App extends Component {
       subscriptions[i] = API.graphql(
         graphqlOperation(TestSub, { text: `test-${i}` })
       ).subscribe({
-          next: (eventData) => console.log(eventData)
+          next: (eventData) => {
+            console.log(eventData);
+            console.log("Mutation received: ", eventData.value.data.onCreateTestMutation.text);
+            console.log("Recieved sub count: ", ++this.subCounter);
+          }
       });
 
       await this.sleep(DELAY_MS);
