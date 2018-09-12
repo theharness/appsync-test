@@ -6,8 +6,8 @@ import awsConfig from './aws-config';
 import TestSub from './graphql/testSub';
 import TestMutation from './graphql/testMutation';
 
-const NUMBER_OF_SUBS  = 10;    // Number of subscriptions for the test
-const NEW_USER        = false; // Clear local storage on refresh
+const NUMBER_OF_SUBS  = 50;    // Number of subscriptions for the test
+const NEW_USER        = true; // Clear local storage on refresh
 const NUMBER_OF_TESTS = 1;    // Run multiple tests
 const DELAY_MS        = 1000; // How long to wait in between subs
 
@@ -36,8 +36,9 @@ class App extends Component {
 
   runTest = async subscriptions => {
     await this.subscribe(subscriptions);
+    await this.sleep(5000);
     await this.testSubs();
-    await this.sleep(10000);
+    await this.sleep(5000);
     this.unsub(subscriptions);
   }
 
